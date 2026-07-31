@@ -79,7 +79,10 @@ foreach ($lnk in $shortcutTargets) {
 
     $sc = $wsh.CreateShortcut($lnk)
     $sc.TargetPath       = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
-    $sc.Arguments        = "-NoProfile -ExecutionPolicy Bypass -STA -File `"$mainScript`""
+    # -WindowStyle Hidden avoids a lingering conhost window behind the WPF UI.
+    # The script also hides its own console via SW_HIDE at startup as a
+    # belt-and-braces measure.
+    $sc.Arguments        = "-NoProfile -ExecutionPolicy Bypass -STA -WindowStyle Hidden -File `"$mainScript`""
     $sc.WorkingDirectory = $toolsDir
     $sc.IconLocation     = "$env:SystemRoot\System32\imageres.dll,174"  # film-reel-ish icon
     $sc.Description      = "Merge two or more videos with FFmpeg"

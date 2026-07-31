@@ -22,6 +22,28 @@
     merge-videos-cli.ps1 in the same folder as a fallback.
 #>
 
+# --------------------------------------------------------- hide the host console ---
+# When launched from a .bat / .lnk, PowerShell brings up a conhost window.
+# The WPF window is the actual UI; the console is just noise. Hide it via
+# SW_HIDE as early as possible so the flash is minimal. Wrapped in try so a
+# hosting environment without a console (ISE, hosted runtime) is not fatal.
+try {
+    if (-not ('ConsoleHide.Win32' -as [type])) {
+        Add-Type -Name Win32 -Namespace ConsoleHide -MemberDefinition @'
+            [System.Runtime.InteropServices.DllImport("kernel32.dll")]
+            public static extern System.IntPtr GetConsoleWindow();
+            [System.Runtime.InteropServices.DllImport("user32.dll")]
+            public static extern bool ShowWindow(System.IntPtr hWnd, int nCmdShow);
+'@ -ErrorAction Stop
+    }
+    $consoleHwnd = [ConsoleHide.Win32]::GetConsoleWindow()
+    if ($consoleHwnd -ne [System.IntPtr]::Zero) {
+        [void][ConsoleHide.Win32]::ShowWindow($consoleHwnd, 0)  # 0 = SW_HIDE
+    }
+} catch {
+    Write-Debug "Could not hide host console: $($_.Exception.Message)"
+}
+
 # --------------------------------------------------------- assembly loads ---
 Add-Type -AssemblyName PresentationFramework
 Add-Type -AssemblyName PresentationCore
@@ -441,23 +463,48 @@ function Start-Merge {
             $txtProgressLabel.Text = "Re-encoding at H.264 CRF 23..."
             Add-LogEntry "Re-encoding (may take a few minutes)..."
 
-            # Build filter graph with silent-audio injection for audio-less segments.
+            # Build filter graph:
+            #   1. Normalize every input to a common WxH with scale+pad (letterbox).
+            #      The concat filter refuses to run when input dimensions don't
+            #      match -- e.g. "Input link in0:v0 parameters (1600x804) do not
+            #      match ... (1920x1062)". Scale each input to the largest
+            #      dimensions across the queue, preserving aspect via
+            #      force_original_aspect_ratio=decrease, then pad with black
+            #      bars to hit the exact target size, then setsar=1.
+            #   2. Inject silent audio (anullsrc) for inputs that have no audio
+            #      track, so the concat filter sees matching stream counts.
+            #   3. Concat.
             $inputArgs = @()
             foreach ($src in $script:videos) { $inputArgs += @("-i", $src) }
             $n = $script:videos.Count
+
+            # Target = max of all input widths/heights, forced to even numbers
+            # (H.264 requires even dimensions).
+            $targetW = 0; $targetH = 0
+            foreach ($info in $script:infos) {
+                if ($info.Width  -gt $targetW) { $targetW = $info.Width }
+                if ($info.Height -gt $targetH) { $targetH = $info.Height }
+            }
+            if ($targetW -le 0 -or $targetH -le 0) { $targetW = 1920; $targetH = 1080 }
+            if ($targetW % 2 -ne 0) { $targetW-- }
+            if ($targetH % 2 -ne 0) { $targetH-- }
+            Add-LogEntry "Normalizing all inputs to ${targetW}x${targetH} (largest input; smaller ones letterboxed)."
+
+            $videoDecls  = @()
             $silentDecls = @()
             $concatChain = ""
             for ($i = 0; $i -lt $n; $i++) {
+                $videoDecls += ("[{0}:v:0]scale={1}:{2}:force_original_aspect_ratio=decrease:flags=lanczos,pad={1}:{2}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1[v{0}]" -f $i, $targetW, $targetH)
                 if ($script:infos[$i].HasAudio) {
-                    $concatChain += "[$i`:v:0][$i`:a:0]"
+                    $concatChain += "[v$i][$i`:a:0]"
                 } else {
                     $dur = [math]::Max(1.0, [double]$script:infos[$i].Duration)
                     $silentDecls += ("anullsrc=r=48000:cl=stereo:d={0}[silent{1}]" -f $dur, $i)
-                    $concatChain += "[$i`:v:0][silent$i]"
+                    $concatChain += "[v$i][silent$i]"
                 }
             }
-            $prefix = if ($silentDecls.Count -gt 0) { ($silentDecls -join ';') + ';' } else { '' }
-            $filterComplex = "$prefix$concatChain" + "concat=n=$n`:v=1:a=1[outv][outa]"
+            $allDecls = $videoDecls + $silentDecls
+            $filterComplex = ($allDecls -join ';') + ';' + $concatChain + "concat=n=$n`:v=1:a=1[outv][outa]"
 
             $mergeArgs = @('-hide_banner', '-loglevel', 'error', '-progress', 'pipe:1', '-nostats') + $inputArgs
             $mergeArgs += @('-filter_complex', $filterComplex,

@@ -326,31 +326,44 @@ try {
         Write-Host "Re-encoding at H.264 CRF 23 (may take a few minutes)..." -ForegroundColor Yellow
         Write-Host ""
 
-        # Re-encode fallback with silent-audio synthesis for audio-less inputs.
-        # Filter graph:
-        #   For each input i:
-        #     If it has audio: use [i:v:0][i:a:0]
-        #     Else:            declare "anullsrc=r=48000:cl=stereo:d=<dur>[silent_i]",
-        #                      then use [i:v:0][silent_i]
-        #   Then: <pairs> concat=n=N:v=1:a=1[outv][outa]
+        # Re-encode fallback:
+        #   1. Normalize every input to a common WxH via scale+pad. The
+        #      concat filter refuses inputs with mismatched dimensions.
+        #      Target = max width/height across the queue (even numbers),
+        #      smaller inputs get letterboxed with black bars.
+        #   2. Inject silent audio for inputs that have no audio track.
+        #   3. Concat.
         $inputArgs = @()
         foreach ($src in $videos) { $inputArgs += @("-i", $src) }
 
         $n = $videos.Count
+
+        $targetW = 0; $targetH = 0
+        foreach ($info in $infos) {
+            if ($info.Width  -gt $targetW) { $targetW = $info.Width }
+            if ($info.Height -gt $targetH) { $targetH = $info.Height }
+        }
+        if ($targetW -le 0 -or $targetH -le 0) { $targetW = 1920; $targetH = 1080 }
+        if ($targetW % 2 -ne 0) { $targetW-- }
+        if ($targetH % 2 -ne 0) { $targetH-- }
+        Write-Host ("Normalizing all inputs to {0}x{1}." -f $targetW, $targetH) -ForegroundColor DarkGray
+
+        $videoDecls  = @()
         $silentDecls = @()
         $concatChain = ""
         for ($i = 0; $i -lt $n; $i++) {
+            $videoDecls += ("[{0}:v:0]scale={1}:{2}:force_original_aspect_ratio=decrease:flags=lanczos,pad={1}:{2}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1[v{0}]" -f $i, $targetW, $targetH)
             if ($infos[$i].HasAudio) {
-                $concatChain += "[$i`:v:0][$i`:a:0]"
+                $concatChain += "[v$i][$i`:a:0]"
             } else {
                 # Use max(1, actual) as a floor so zero-duration probe failures still produce SOME audio.
                 $dur = [math]::Max(1.0, [double]$infos[$i].Duration)
                 $silentDecls += ("anullsrc=r=48000:cl=stereo:d={0}[silent{1}]" -f $dur, $i)
-                $concatChain += "[$i`:v:0][silent$i]"
+                $concatChain += "[v$i][silent$i]"
             }
         }
-        $prefix = if ($silentDecls.Count -gt 0) { ($silentDecls -join ';') + ';' } else { '' }
-        $filterComplex = "$prefix$concatChain" + "concat=n=$n`:v=1:a=1[outv][outa]"
+        $allDecls = $videoDecls + $silentDecls
+        $filterComplex = ($allDecls -join ';') + ';' + $concatChain + "concat=n=$n`:v=1:a=1[outv][outa]"
 
         $reencodeArgs = @()
         $reencodeArgs += $inputArgs
