@@ -1,5 +1,8 @@
 # Merge Videos (FFmpeg) for Windows
 
+[![CI](https://github.com/advansnexus/merge-videos-ffmpeg/actions/workflows/ci.yml/badge.svg)](https://github.com/advansnexus/merge-videos-ffmpeg/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 Zero-cost Windows utility that merges two or more videos into a single file, in the exact order you upload them. Simple GUI: upload Video 1, upload Video 2, then answer "Add another?" — repeat as needed.
 
 Companion to [`extract-audio-ffmpeg`](https://github.com/amoakoh22/extract-audio-ffmpeg) and shares the same install location (`%LOCALAPPDATA%\FFmpegTools\`).
