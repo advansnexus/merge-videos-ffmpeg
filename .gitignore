@@ -1,0 +1,22 @@
+# Windows
+Thumbs.db
+Desktop.ini
+
+# Editors
+.vscode/
+.idea/
+*.swp
+
+# Test outputs
+tests/output/
+*.tmp
+merge-smoketest-*.mp4
+merge-smoketest-*.txt
+
+# Large sample videos (should live outside the repo)
+*.mp4
+*.mov
+*.mkv
+*.avi
+*.webm
+*.m4a

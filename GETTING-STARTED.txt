@@ -1,0 +1,91 @@
+MERGE VIDEOS (FFMPEG)  --  SETUP GUIDE
+=======================================
+
+REQUIREMENTS: Windows 10 or 11. Internet during setup only. No admin needed.
+
+
+STEP 1  --  EXTRACT THE ZIP
+---------------------------
+Right-click the ZIP file  ->  Extract All  ->  Extract
+
+
+STEP 2  --  RUN THE INSTALLER
+-----------------------------
+Open the extracted folder and double-click:
+
+    Install.bat
+
+A dark window opens and runs automatically. Do not close it.
+Wait for:  [4/4] Done!
+Then press any key to close.
+
+   Takes a few minutes on first run -- it is downloading a free tool (~240 MB).
+   If FFmpeg was already installed by the extract-audio tool, this is instant.
+
+   If Windows shows "Windows protected your PC":
+     Click "More info"  ->  "Run anyway"  (this is normal, the tool is safe)
+
+
+STEP 3  --  CONFIRM IT WORKED
+------------------------------
+You should now have on your Desktop:
+
+    Merge Videos
+
+And in your Start Menu (search for it):
+
+    Merge Videos
+
+Setup is done. You will not need to run the installer again.
+
+
+HOW TO USE
+----------
+
+1. Double-click "Merge Videos" (Desktop or Start Menu).
+
+2. A file picker opens titled "Upload Video 1".
+   Browse to and select your first video. Click Open.
+
+3. Another file picker opens titled "Upload Video 2".
+   Browse to and select your second video. Click Open.
+
+4. A Yes/No dialog appears:  "Add another video?"
+   -  Click YES to add a third video (picker opens again as "Upload Video 3")
+   -  Click NO to stop adding videos
+   Repeat as needed. You can add as many videos as you want.
+
+5. A confirmation window shows the merge order.
+   -  Click OK to proceed
+   -  Click Cancel to abort and start over
+
+6. A Save dialog appears titled "Save merged video as...".
+   Choose where to save the merged file and click Save.
+   Default name is <first-video-name>_merged.mp4.
+
+7. A dark window shows progress. Wait for green SUCCESS.
+   Press any key to close.
+
+
+EXAMPLE
+-------
+You want to join two screen recordings in a specific order:
+
+  Video 1:  Cropping and scanning.mp4        <- plays first
+  Video 2:  IBRAHIM BASIRU SCANNING.mp4      <- plays second
+
+Result:  Cropping and scanning_merged.mp4  (both clips, back-to-back)
+
+
+TROUBLESHOOTING
+---------------
+Shortcut missing                      ->  Run Install.bat again
+Window closes immediately             ->  Move videos to Desktop and try again
+"Stream copy failed" (yellow warning) ->  Normal -- it is retrying with re-encoding.
+                                          Wait for green SUCCESS.
+Merge takes very long                 ->  Re-encoding path was used -- expected for
+                                          large or mismatched-source videos
+Red error in window                   ->  Screenshot it and send to whoever shared this
+
+
+OUTPUT FILE IS SAVED WHEREVER YOU CHOSE IN THE SAVE DIALOG.
