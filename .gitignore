@@ -20,3 +20,11 @@ merge-smoketest-*.txt
 *.avi
 *.webm
 *.m4a
+
+# Distribution artifacts produced by Build-ShareZip.ps1
+MergeVideos-Installer.zip
+
+# Signing artifacts (never commit private keys/certs)
+*.pfx
+*.pvk
+*.snk

@@ -324,6 +324,86 @@ if ($env:MERGE_SKIP_PATHOLOGICAL -eq '1') {
     }
 }
 
+# -- Phase 4: Mixed-audio end-to-end merge (auto) --------------------------
+Write-Host ""
+Write-Host "[7] Mixed-audio end-to-end merge (auto: one with audio, one silent)"
+
+if ($env:MERGE_SKIP_PATHOLOGICAL -eq '1') {
+    Skip-Test "mixed-audio merge" "MERGE_SKIP_PATHOLOGICAL=1"
+} elseif (-not $ffmpegPath) {
+    Skip-Test "mixed-audio merge" "ffmpeg not available"
+} else {
+    $ffprobePath = Get-FfprobePath -ffmpegPath $ffmpegPath
+    if (-not $ffprobePath) {
+        Skip-Test "mixed-audio merge" "ffprobe not available"
+    } else {
+        # Synthesize one video with audio, one video without.
+        # This reproduces the exact scenario merge-videos.ps1's re-encode
+        # fallback must handle: mismatched stream counts across inputs.
+        # If we do not inject silent audio for the second input, ffmpeg's
+        # concat filter fails with "Input link parameters ... do not match"
+        # or drops the audio track for the first segment.
+        $tempRoot = Join-Path $env:TEMP ("merge-mixaudio-{0}" -f ([guid]::NewGuid().ToString("N")))
+        New-Item -ItemType Directory -Force -Path $tempRoot | Out-Null
+
+        $vAudio   = Join-Path $tempRoot "with-audio.mp4"
+        $vSilent  = Join-Path $tempRoot "no-audio.mp4"
+        $outFile  = Join-Path $tempRoot "merged.mp4"
+
+        try {
+            Write-Host "  Synthesizing one video WITH audio + one WITHOUT..." -ForegroundColor DarkGray
+            & $ffmpegPath -hide_banner -loglevel error `
+                -f lavfi -i "testsrc=duration=2:size=320x240:rate=15" `
+                -f lavfi -i "sine=frequency=440:duration=2" -shortest `
+                -c:v libx264 -preset ultrafast -pix_fmt yuv420p `
+                -c:a aac `
+                "$vAudio" -y
+            Assert ((Test-Path $vAudio) -and ((Get-Item $vAudio).Length -gt 0)) "generated video with audio"
+
+            & $ffmpegPath -hide_banner -loglevel error `
+                -f lavfi -i "testsrc=duration=2:size=320x240:rate=15" `
+                -c:v libx264 -preset ultrafast -pix_fmt yuv420p `
+                "$vSilent" -y
+            Assert ((Test-Path $vSilent) -and ((Get-Item $vSilent).Length -gt 0)) "generated silent (video-only) video"
+
+            # Confirm ffprobe agrees on stream presence -- catches regressions
+            # if a future ffmpeg version starts adding audio to lavfi testsrc.
+            $silentHasAudio = & $ffprobePath -v error -select_streams a:0 -show_entries stream=codec_type -of csv=p=0 "$vSilent"
+            Assert ([string]::IsNullOrEmpty($silentHasAudio)) "confirmed no-audio input has no audio stream"
+
+            # Replicate merge-videos.ps1's audio-less filter graph.
+            # For each input i, if it has audio, use [i:v:0][i:a:0]; else
+            # inject 'anullsrc=r=48000:cl=stereo:d=<dur>[silent_i]' and use
+            # [i:v:0][silent_i]. Then concat=n=N:v=1:a=1.
+            $silentDur    = 2
+            $filterComplex = "anullsrc=r=48000:cl=stereo:d=${silentDur}[silent1];[0:v:0][0:a:0][1:v:0][silent1]concat=n=2:v=1:a=1[outv][outa]"
+
+            Write-Host "  Merging with silent-audio injection..." -ForegroundColor DarkGray
+            & $ffmpegPath -hide_banner -loglevel error `
+                -i "$vAudio" -i "$vSilent" `
+                -filter_complex $filterComplex `
+                -map "[outv]" -map "[outa]" `
+                -c:v libx264 -crf 23 -preset ultrafast `
+                -c:a aac -b:a 192k `
+                "$outFile" -y
+            Assert ((Test-Path $outFile) -and ((Get-Item $outFile).Length -gt 0)) "mixed-audio merge produced a non-empty output"
+
+            if (Test-Path $outFile) {
+                $duration = & $ffprobePath -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$outFile"
+                Assert ([double]$duration -ge 3.8) "mixed-audio merge duration >= 3.8s (got $duration)"
+
+                # Verify the output has BOTH streams -- the point of the silent injection.
+                $outStreams = & $ffprobePath -v error -show_entries stream=codec_type -of csv=p=0 "$outFile"
+                $hasV = $outStreams -match 'video'
+                $hasA = $outStreams -match 'audio'
+                Assert ($hasV -and $hasA) "mixed-audio merge output contains both video AND audio streams"
+            }
+        } finally {
+            if (Test-Path $tempRoot) { Remove-Item $tempRoot -Recurse -Force -ErrorAction SilentlyContinue }
+        }
+    }
+}
+
 # -- Summary --------------------------------------------------------------
 Write-Host ""
 Write-Host "Summary" -ForegroundColor Cyan

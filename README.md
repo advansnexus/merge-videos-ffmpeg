@@ -26,6 +26,9 @@ Joins the uploaded videos end-to-end in upload order. First tries **stream copy*
 - 2 or more `.mp4` / `.mov` / `.mkv` / `.avi` / `.webm` files
 - Ordered join — the order you upload is the order they play
 - Automatic codec-compatibility handling (stream copy → re-encode fallback)
+- **Mixed-audio inputs** — if some videos have audio and some don't, silent audio is auto-injected so the merge succeeds cleanly
+- **Pre-flight preview** — before merging, you see per-input codec / resolution / duration / audio-presence and the estimated merged duration
+- **Real-time progress bar** — `[###----] 40% (0m30s / 1m15s)` in place, driven by ffmpeg's `-progress` output
 - Files of any size — merge is I/O-bound when stream copy succeeds
 
 **Out of scope**
@@ -43,9 +46,9 @@ Joins the uploaded videos end-to-end in upload order. First tries **stream copy*
 3. **Add another video?** — Yes/No dialog:
    - Yes → file picker for Video 3 → dialog again ("Add another video?") → ...
    - No → move to confirmation
-4. **Confirm order** — shows the numbered list of videos, OK to proceed, Cancel to abort
+4. **Confirm order** — shows numbered list with per-input codec, resolution, duration, and audio presence (e.g. `[h264 1920x1080 2m14s audio]` or `[hevc 1280x720 45s SILENT]`), plus estimated total merged duration
 5. **Save merged video as...** — Save dialog, default name is `<first-video-name>_merged.mp4`
-6. **Progress + result** — console shows encoding progress, then green `SUCCESS` with input/output sizes
+6. **Progress + result** — real-time progress bar in the console, then green `SUCCESS` with input/output sizes
 
 The initial folder for each subsequent picker defaults to the folder of the previous upload, so navigating is fast when all videos live together.
 
@@ -69,15 +72,13 @@ No admin rights required.
 
 ## Sharing with Colleagues
 
-Zip these five files and share them:
+One command builds a ready-to-send ZIP:
 
-- `Install.bat`
-- `install.ps1`
-- `merge-videos.ps1`
-- `MergeVideos.bat` *(optional — for a self-contained folder launch)*
-- `GETTING-STARTED.txt`
+```powershell
+powershell -ExecutionPolicy Bypass -File Build-ShareZip.ps1
+```
 
-Your colleague extracts the zip and double-clicks `Install.bat`. The installer auto-detects the FFmpeg path on their machine and patches the script — no manual editing required.
+Produces `MergeVideos-Installer.zip` (~9 KB) containing the seven files a colleague needs. They extract it and double-click `Install.bat` — the installer auto-detects the FFmpeg path on their machine and patches the script. No manual editing required.
 
 **Requirements:** Windows 10/11, PowerShell 5.1+, internet access (for the ~240 MB FFmpeg download on first install).
 
@@ -162,7 +163,9 @@ Removes: Desktop shortcut, Start Menu shortcut, and `%LOCALAPPDATA%\FFmpegTools\
 | `MergeVideos.bat` | Portable launcher — runs merge-videos.ps1 from this folder without installing |
 | `Uninstall.bat` | Double-click uninstaller launcher |
 | `uninstall.ps1` | Removes shortcuts and the installed script |
-| `RUNBOOK.md` | Operational reference — architecture, troubleshooting, maintenance |
+| `Build-ShareZip.ps1` | Produces `MergeVideos-Installer.zip` for distribution |
+| `tests/smoke-test.ps1` | Headless test suite — parse + PSScriptAnalyzer + escape corpus + end-to-end merges |
+| `RUNBOOK.md` | Operational reference — architecture, troubleshooting, code-signing, sibling-compat, iteration log |
 
 ---
 

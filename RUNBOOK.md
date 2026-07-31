@@ -165,9 +165,90 @@ The installer auto-patches the FFmpeg path per-machine — no manual editing.
 
 ---
 
+## Sibling compatibility (extract-audio-ffmpeg)
+
+`merge-videos-ffmpeg` and its sibling `extract-audio-ffmpeg` are designed to coexist on the same machine. Verified 2026-07-31:
+
+| Concern | extract-audio-ffmpeg | merge-videos-ffmpeg | Collision? |
+|---|---|---|---|
+| Install directory | `%LOCALAPPDATA%\FFmpegTools\` | `%LOCALAPPDATA%\FFmpegTools\` | **No** — different filenames (`extract-audio.ps1`, `compress-video.ps1` vs. `merge-videos.ps1`) |
+| FFmpeg discovery | Recursive scan of `%LOCALAPPDATA%\Microsoft\WinGet\Packages` | Same | No — read-only lookup |
+| Path patch on install | Rewrites `$ffmpeg = "..."` in its own scripts | Same, its own script | No |
+| Windows integration | Right-click menu under `HKCU\...\SystemFileAssociations\.mp4\shell\{ExtractAudio,CompressVideo}` | Desktop + Start Menu shortcuts | No — different registration mechanisms |
+| Uninstall scope | Removes its two shortcuts + its scripts | Removes its two shortcuts + its script | No — each script targets its own filenames only |
+| FFmpeg itself | Left in place by uninstaller | Left in place by uninstaller | No — shared safely |
+
+**Upgrade note:** if winget installs a new FFmpeg version, the hardcoded path in *both* projects' installed scripts will break. Re-run **both** `Install.bat` files (order doesn't matter) to re-patch.
+
+---
+
+## Code signing
+
+By default, `merge-videos.ps1` and `install.ps1` are unsigned. Windows PowerShell won't run them without `-ExecutionPolicy Bypass` (which the launchers already set), and Windows Defender SmartScreen may show a "Windows protected your PC" prompt on first double-click of `Install.bat`. Users click "More info" → "Run anyway" and it works.
+
+To reduce that friction, sign the scripts. Two options:
+
+### Option A — self-signed (development / internal-tools tier)
+
+Fine for personal use or colleagues who trust the source. Does NOT satisfy SmartScreen.
+
+```powershell
+# 1. Create a code-signing cert in the Current User store
+$cert = New-SelfSignedCertificate `
+    -Subject "CN=MergeVideosDev" `
+    -Type CodeSigning `
+    -KeyUsage DigitalSignature `
+    -CertStoreLocation Cert:\CurrentUser\My `
+    -HashAlgorithm SHA256 `
+    -NotAfter (Get-Date).AddYears(3)
+
+# 2. Trust it (add to Trusted Root + Trusted Publishers)
+Export-Certificate -Cert $cert -FilePath $env:TEMP\mvdev.cer | Out-Null
+Import-Certificate -FilePath $env:TEMP\mvdev.cer -CertStoreLocation Cert:\CurrentUser\Root
+Import-Certificate -FilePath $env:TEMP\mvdev.cer -CertStoreLocation Cert:\CurrentUser\TrustedPublisher
+
+# 3. Sign the scripts
+foreach ($f in 'merge-videos.ps1','install.ps1','uninstall.ps1','Build-ShareZip.ps1') {
+    Set-AuthenticodeSignature -FilePath $f -Certificate $cert -TimestampServer http://timestamp.digicert.com
+}
+```
+
+Colleagues who re-run `Install.bat` will need to import your public cert first (or accept an untrusted-publisher prompt).
+
+### Option B — organizational CA / EV cert (distribution tier)
+
+Signs cleanly under `AllSigned` policy AND clears SmartScreen after enough downloads accumulate reputation (~weeks). Cost: $300–500/year for an EV cert from a Windows-trusted CA (DigiCert, Sectigo, etc.). Workflow is the same `Set-AuthenticodeSignature` call — swap the cert.
+
+### Verifying a signature
+
+```powershell
+Get-AuthenticodeSignature .\merge-videos.ps1
+# Status should be "Valid"; SignerCertificate.Subject shows who signed it.
+```
+
+**Never commit signing certs to git.** The `.gitignore` already excludes `*.pfx`, `*.pvk`, `*.snk`. Keep private keys in Windows' certificate store or a corporate secrets vault.
+
+---
+
 ## Iteration Log
 
 Chronological record of polish passes (from the `/loop 30m` polish cadence). Each entry says WHAT was changed and WHY, so future maintainers (and future polish iterations) don't repeat work.
+
+### Iteration 3 — 2026-07-31 — Audio-less inputs + pre-flight + real-time progress
+- **Audio-less input support in re-encode fallback**: added `Get-VideoInfo` helper that runs `ffprobe` per input to determine `HasAudio`, `Duration`, `VideoCodec`, `Width`, `Height`, `Fps`. When any input has no audio track, the fallback builds a filter graph that injects `anullsrc=r=48000:cl=stereo:d=<dur>` for that segment, producing a merged output where BOTH streams (video and silent audio for that portion) are present. Previously the concat filter would error out or silently drop audio.
+- **Stream-copy is bypassed when audio is mixed**: rather than let stream copy fail obscurely, we detect the mixed-audio case up front and go straight to re-encode with silent injection.
+- **Pre-flight preview**: replaced the plain `Confirm-Order` dialog with `Confirm-OrderWithSummary` that shows per-input codec, resolution, duration, and audio presence, plus estimated total merged duration. Users see the plan (and any SILENT markers) before committing.
+- **Real-time progress bar**: new `Invoke-FfmpegWithProgress` wraps ffmpeg with `-progress pipe:1 -nostats`, parses `out_time_ms=` lines, and renders `[####------] 40% (0m30s / 1m15s)` in place. stderr still passes to the console so real errors are visible.
+- **Smoke test Phase 4**: synthesizes one video with audio + one without, runs the mixed-audio filter graph, verifies output has BOTH streams (32/32 pass locally).
+- **Rationale:** the two most common real-world failure modes (silent screen recordings; long merges with no progress feedback) are now handled without surprising the user.
+
+### Iteration 4 — 2026-07-31 — Colleague distribution + docs
+- **`Build-ShareZip.ps1`**: single-command packager that stages the 7 files a colleague needs (`Install.bat`, `install.ps1`, `merge-videos.ps1`, `MergeVideos.bat`, `Uninstall.bat`, `uninstall.ps1`, `GETTING-STARTED.txt`) into `MergeVideos-Installer.zip`. Refuses to run if any source file is missing. Output size ~9 KB.
+- **`.gitignore`**: excludes the produced ZIP + any code-signing artifacts (`*.pfx`, `*.pvk`, `*.snk`) so private keys can never be committed by accident.
+- **Rationale:** distribution used to require manually zipping the right subset; now it's one command and immune to file-list drift.
+
+### Iteration 5 — 2026-07-31 — Sibling compatibility + code-signing docs (final)
+See "Sibling compatibility" and "Code signing" sections below.
 
 ### Iteration 2 — 2026-07-31 — Pathological-filename corpus + end-to-end CI
 - **Expanded escape corpus** in `tests\smoke-test.ps1` Phase 1c from 4 → 15 cases: single quotes (basic + multiple), spaces, leading dash (flag injection), double quote, `%`, `&`, `;`, `$`, backtick, unicode (accent + emoji), 200-char long filename, embedded newline.
