@@ -27,30 +27,45 @@
 
 [CmdletBinding()]
 param(
-    [string]$OutputPath = (Join-Path $PSScriptRoot "MergeVideos-Installer.zip")
+    [string]$OutputPath
 )
 
 $ErrorActionPreference = 'Stop'
 
+# $PSScriptRoot is not populated during parameter binding on PS 5.1 when
+# invoked via -File with a full path, so the default is resolved here.
+$repoRoot = $PSScriptRoot
+if (-not $repoRoot) { $repoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path }
+if (-not $repoRoot) { $repoRoot = (Get-Location).Path }
+if (-not $OutputPath) { $OutputPath = Join-Path $repoRoot "MergeVideos-Installer.zip" }
+
 $filesToBundle = @(
     'Install.bat',
     'install.ps1',
-    'merge-videos.ps1',       # WPF single-window GUI (primary)
-    'merge-videos-cli.ps1',   # classic step-by-step CLI (fallback)
+    'Test-System.ps1',              # pre-flight check
+    'Get-DiagnosticInfo.ps1',       # support bundle generator
+    'Trust-Publisher.ps1',          # one-time cert trust helper (optional use)
+    'merge-videos.ps1',             # WPF single-window GUI (primary)
+    'merge-videos-cli.ps1',         # classic step-by-step CLI (fallback)
     'MergeVideos.bat',
     'Uninstall.bat',
     'uninstall.ps1',
     'GETTING-STARTED.txt'
 )
 
+# Optional files -- only bundle if present (signed build).
+$optionalFiles = @(
+    'MergeVideos-Publisher.cer'     # only exists after Sign-Scripts.ps1 -Export
+)
+
 # Verify all source files are present -- fail loud if the checklist and repo drift.
 $missing = @()
 foreach ($f in $filesToBundle) {
-    $path = Join-Path $PSScriptRoot $f
+    $path = Join-Path $repoRoot $f
     if (-not (Test-Path $path)) { $missing += $f }
 }
 if ($missing.Count -gt 0) {
-    Write-Host "ERROR: The following files are missing from $PSScriptRoot :" -ForegroundColor Red
+    Write-Host "ERROR: The following files are missing from $repoRoot :" -ForegroundColor Red
     $missing | ForEach-Object { Write-Host "  - $_" -ForegroundColor Red }
     exit 1
 }
@@ -61,7 +76,11 @@ $staging = Join-Path $env:TEMP ("mvf-stage-{0}" -f ([guid]::NewGuid().ToString('
 try {
     New-Item -ItemType Directory -Force -Path $staging | Out-Null
     foreach ($f in $filesToBundle) {
-        Copy-Item -Path (Join-Path $PSScriptRoot $f) -Destination $staging -Force
+        Copy-Item -Path (Join-Path $repoRoot $f) -Destination $staging -Force
+    }
+    foreach ($f in $optionalFiles) {
+        $p = Join-Path $repoRoot $f
+        if (Test-Path $p) { Copy-Item -Path $p -Destination $staging -Force }
     }
 
     if (Test-Path $OutputPath) { Remove-Item $OutputPath -Force }

@@ -85,7 +85,17 @@ Write-Host ""
 
 # -- Phase 1a: PowerShell parse check --------------------------------------
 Write-Host "[1] PowerShell parse check"
-$scripts = @('merge-videos.ps1', 'merge-videos-cli.ps1', 'install.ps1', 'uninstall.ps1', 'Build-ShareZip.ps1')
+$scripts = @(
+    'merge-videos.ps1',
+    'merge-videos-cli.ps1',
+    'install.ps1',
+    'uninstall.ps1',
+    'Build-ShareZip.ps1',
+    'Test-System.ps1',
+    'Get-DiagnosticInfo.ps1',
+    'Sign-Scripts.ps1',
+    'Trust-Publisher.ps1'
+)
 foreach ($s in $scripts) {
     $path = Join-Path $repoRoot $s
     $errors = $null
