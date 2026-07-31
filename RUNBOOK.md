@@ -169,6 +169,14 @@ The installer auto-patches the FFmpeg path per-machine — no manual editing.
 
 Chronological record of polish passes (from the `/loop 30m` polish cadence). Each entry says WHAT was changed and WHY, so future maintainers (and future polish iterations) don't repeat work.
 
+### Iteration 2 — 2026-07-31 — Pathological-filename corpus + end-to-end CI
+- **Expanded escape corpus** in `tests\smoke-test.ps1` Phase 1c from 4 → 15 cases: single quotes (basic + multiple), spaces, leading dash (flag injection), double quote, `%`, `&`, `;`, `$`, backtick, unicode (accent + emoji), 200-char long filename, embedded newline.
+- **New Phase 3 (auto-generated e2e)**: uses ffmpeg's `lavfi` sources to synthesize two 1-second test videos with adversarial filenames (spaces + `&` + `%` + quotes + leading dash), writes a concat list via the exact same `Format-ConcatLine` helper the production script uses, then runs the actual `ffmpeg -f concat -c copy` and validates the output with `ffprobe`. Proves end-to-end that our escape rule survives real ffmpeg execution.
+- **`Get-FfmpegPath` / `Get-FfprobePath` helpers**: check hardcoded path first, then fall back to `Get-Command` on PATH. Lets the CI runner use choco-installed ffmpeg without patching the hardcoded path.
+- **`MERGE_SKIP_PATHOLOGICAL=1`** env var: opt-out for the lint-only CI jobs that don't install ffmpeg.
+- **CI split into three jobs**: `lint-winps` (5.1), `lint-pwsh` (7), and `e2e-with-ffmpeg` (7 + choco ffmpeg install). Bumped `actions/checkout@v4` -> `v7` (clears the Node 20 deprecation warning).
+- **Rationale:** the README claims "hardened against FFmpeg flag injection via crafted filenames." Iteration 2 turns that claim from a design intent into a CI-enforced invariant — any regression in the escape rule now fails on push.
+
 ### Iteration 1 — 2026-07-31 — Static analysis + CI
 - **Added PSScriptAnalyzer** as the project's static-analysis gate.
   - `PSScriptAnalyzerSettings.psd1` — pinned config; excludes `PSAvoidUsingWriteHost` (the tool is deliberately console-first, matching sibling `extract-audio-ffmpeg`), fails on `Error` + `Warning` severities.

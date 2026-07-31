@@ -11,13 +11,13 @@ permissions:
   contents: read
 
 jobs:
-  smoke-test:
-    name: Smoke test (Windows PowerShell 5.1)
+  lint-winps:
+    name: Lint (Windows PowerShell 5.1)
     runs-on: windows-latest
     timeout-minutes: 10
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install PSScriptAnalyzer
         shell: powershell
@@ -26,32 +26,60 @@ jobs:
           Install-Module -Name PSScriptAnalyzer -Scope CurrentUser -Force -SkipPublisherCheck
           Get-Module -ListAvailable PSScriptAnalyzer | Select-Object Version, Name
 
-      - name: Run smoke test (Phase 1 only, CI mode)
+      - name: Run smoke test (Phase 1 only, CI mode -- no ffmpeg)
         shell: powershell
         env:
           MERGE_CI: '1'
+          MERGE_SKIP_PATHOLOGICAL: '1'
         run: |
           powershell -NoProfile -ExecutionPolicy Bypass -File tests\smoke-test.ps1
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-  smoke-test-pwsh7:
-    name: Smoke test (PowerShell 7)
+  lint-pwsh:
+    name: Lint (PowerShell 7)
     runs-on: windows-latest
     timeout-minutes: 10
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
-      - name: Install PSScriptAnalyzer (pwsh 7)
+      - name: Install PSScriptAnalyzer
         shell: pwsh
         run: |
           Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
           Install-Module -Name PSScriptAnalyzer -Scope CurrentUser -Force -SkipPublisherCheck
 
-      - name: Run smoke test (Phase 1 only, CI mode)
+      - name: Run smoke test (Phase 1 only, CI mode -- no ffmpeg)
         shell: pwsh
         env:
           MERGE_CI: '1'
+          MERGE_SKIP_PATHOLOGICAL: '1'
+        run: |
+          pwsh -NoProfile -ExecutionPolicy Bypass -File tests/smoke-test.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+  e2e-with-ffmpeg:
+    name: End-to-end (with ffmpeg)
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install ffmpeg (choco)
+        shell: pwsh
+        run: |
+          choco install ffmpeg --no-progress --limit-output --yes
+          ffmpeg -version | Select-Object -First 1
+
+      - name: Install PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+          Install-Module -Name PSScriptAnalyzer -Scope CurrentUser -Force -SkipPublisherCheck
+
+      - name: Run full smoke test (all phases incl. pathological-filename e2e)
+        shell: pwsh
         run: |
           pwsh -NoProfile -ExecutionPolicy Bypass -File tests/smoke-test.ps1
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
