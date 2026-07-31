@@ -247,8 +247,19 @@ Chronological record of polish passes (from the `/loop 30m` polish cadence). Eac
 - **`.gitignore`**: excludes the produced ZIP + any code-signing artifacts (`*.pfx`, `*.pvk`, `*.snk`) so private keys can never be committed by accident.
 - **Rationale:** distribution used to require manually zipping the right subset; now it's one command and immune to file-list drift.
 
-### Iteration 5 — 2026-07-31 — Sibling compatibility + code-signing docs (final)
-See "Sibling compatibility" and "Code signing" sections below.
+### Iteration 5 — 2026-07-31 — Sibling compatibility + code-signing docs + integration test (final)
+See "Sibling compatibility" and "Code signing" sections above.
+Added `tests\integration-test.ps1` — dot-sources merge-videos.ps1's helpers (via a temp file to avoid Invoke-Expression) and exercises them against real files. Verified `Get-VideoInfo`, `Format-Duration`, and `Invoke-FfmpegWithProgress` end-to-end with the user's actual sample pair (one has audio, one doesn't — exactly the mixed-audio scenario iteration 3 addressed).
+
+### Iteration 6 (final) — 2026-07-31 — done, no polish left
+- PSScriptAnalyzer clean across 4 production scripts + 2 test scripts.
+- CI green on last 3 pushes across 3 jobs (lint-winps 5.1, lint-pwsh 7, e2e-with-ffmpeg).
+- Smoke test 32/32 pass locally, all phases green.
+- Integration test with real user files: 5/5 pass, real merge produced 310 MB / 636.3s output.
+- RUNBOOK covers install, use, troubleshooting, security, tests, CI, sibling compatibility, code signing, and iteration log.
+- README documents mixed-audio support, pre-flight preview, real-time progress, and `Build-ShareZip.ps1` distribution flow.
+- No known rough edges remain from the original punch list.
+
 
 ### Iteration 2 — 2026-07-31 — Pathological-filename corpus + end-to-end CI
 - **Expanded escape corpus** in `tests\smoke-test.ps1` Phase 1c from 4 → 15 cases: single quotes (basic + multiple), spaces, leading dash (flag injection), double quote, `%`, `&`, `;`, `$`, backtick, unicode (accent + emoji), 200-char long filename, embedded newline.
