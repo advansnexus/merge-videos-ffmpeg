@@ -70,7 +70,7 @@ foreach ($lnk in $shortcutTargets) {
 
     $sc = $wsh.CreateShortcut($lnk)
     $sc.TargetPath       = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
-    $sc.Arguments        = "-NoProfile -ExecutionPolicy Bypass -File `"$dst`""
+    $sc.Arguments        = "-NoProfile -ExecutionPolicy Bypass -STA -File `"$dst`""
     $sc.WorkingDirectory = $toolsDir
     $sc.IconLocation     = "$env:SystemRoot\System32\imageres.dll,174"  # film-reel-ish icon
     $sc.Description      = "Merge two or more videos with FFmpeg"

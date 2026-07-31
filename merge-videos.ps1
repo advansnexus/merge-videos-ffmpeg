@@ -8,6 +8,11 @@
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
+# Initialize WinForms visual styles once at load. Some Windows Terminal
+# configurations swallow the first MessageBox if this is skipped -- the dialog
+# is created but never surfaced to the user.
+[System.Windows.Forms.Application]::EnableVisualStyles()
+
 $ffmpeg  = "C:\Users\nexus\AppData\Local\Microsoft\WinGet\Packages\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\ffmpeg-8.1.1-full_build\bin\ffmpeg.exe"
 $ffprobe = if ($ffmpeg) { Join-Path (Split-Path $ffmpeg -Parent) "ffprobe.exe" } else { $null }
 
@@ -17,31 +22,58 @@ function Wait-Keypress {
     $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
 }
 
+function Get-TopmostOwner {
+    # A hidden always-on-top Form used as the owner of MessageBox / File dialogs.
+    # Without an owner, WinForms dialogs launched from a console script can
+    # spawn *behind* the terminal window, leaving the user staring at a
+    # blinking cursor while the dialog is invisible on the taskbar.
+    $f = New-Object System.Windows.Forms.Form
+    $f.TopMost         = $true
+    $f.ShowInTaskbar   = $false
+    $f.Opacity         = 0
+    $f.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::None
+    $f.StartPosition   = [System.Windows.Forms.FormStartPosition]::Manual
+    $f.Location        = New-Object System.Drawing.Point -10000, -10000
+    $f.Size            = New-Object System.Drawing.Size 1, 1
+    $f.Show()          # required so it's a valid owner
+    $f.Hide()          # invisible, but topmost affinity is retained
+    return $f
+}
+
 function Show-ErrorBox($msg) {
-    [System.Windows.Forms.MessageBox]::Show($msg, "Merge Videos - Error",
-        [System.Windows.Forms.MessageBoxButtons]::OK,
-        [System.Windows.Forms.MessageBoxIcon]::Error) | Out-Null
+    $owner = Get-TopmostOwner
+    try {
+        [System.Windows.Forms.MessageBox]::Show($owner, $msg, "Merge Videos - Error",
+            [System.Windows.Forms.MessageBoxButtons]::OK,
+            [System.Windows.Forms.MessageBoxIcon]::Error) | Out-Null
+    } finally { $owner.Dispose() }
 }
 
 function Select-VideoFile($number, $initialDir) {
-    $dlg = New-Object System.Windows.Forms.OpenFileDialog
-    $dlg.Title = "Upload Video $number"
-    $dlg.Filter = "MP4 Videos (*.mp4)|*.mp4|All Video Files (*.mp4;*.mov;*.mkv;*.avi;*.webm)|*.mp4;*.mov;*.mkv;*.avi;*.webm|All Files (*.*)|*.*"
-    $dlg.Multiselect = $false
-    if ($initialDir -and (Test-Path $initialDir)) { $dlg.InitialDirectory = $initialDir }
-    if ($dlg.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
-        return $dlg.FileName
-    }
-    return $null
+    $owner = Get-TopmostOwner
+    try {
+        $dlg = New-Object System.Windows.Forms.OpenFileDialog
+        $dlg.Title = "Upload Video $number"
+        $dlg.Filter = "MP4 Videos (*.mp4)|*.mp4|All Video Files (*.mp4;*.mov;*.mkv;*.avi;*.webm)|*.mp4;*.mov;*.mkv;*.avi;*.webm|All Files (*.*)|*.*"
+        $dlg.Multiselect = $false
+        if ($initialDir -and (Test-Path $initialDir)) { $dlg.InitialDirectory = $initialDir }
+        if ($dlg.ShowDialog($owner) -eq [System.Windows.Forms.DialogResult]::OK) {
+            return $dlg.FileName
+        }
+        return $null
+    } finally { $owner.Dispose() }
 }
 
 function Confirm-AddMore($currentCount) {
-    $result = [System.Windows.Forms.MessageBox]::Show(
-        "You have added $currentCount videos so far.`n`nAdd another video?",
-        "Merge Videos",
-        [System.Windows.Forms.MessageBoxButtons]::YesNo,
-        [System.Windows.Forms.MessageBoxIcon]::Question)
-    return ($result -eq [System.Windows.Forms.DialogResult]::Yes)
+    $owner = Get-TopmostOwner
+    try {
+        $result = [System.Windows.Forms.MessageBox]::Show($owner,
+            "You have added $currentCount videos so far.`n`nAdd another video?",
+            "Merge Videos",
+            [System.Windows.Forms.MessageBoxButtons]::YesNo,
+            [System.Windows.Forms.MessageBoxIcon]::Question)
+        return ($result -eq [System.Windows.Forms.DialogResult]::Yes)
+    } finally { $owner.Dispose() }
 }
 
 function Get-VideoInfo($ffprobePath, $videoPath) {
@@ -101,10 +133,13 @@ function Confirm-OrderWithSummary($files, $infos) {
         $note = "`r`nNote: at least one input has no audio track. Silent audio will be`r`ninjected so the merge succeeds (forces re-encode path)."
     }
     $msg = "Videos will be merged in this order:`r`n`r`n$list`r`nEstimated total duration: $totalStr$note`r`n`r`nProceed?"
-    $result = [System.Windows.Forms.MessageBox]::Show($msg, "Confirm Merge Order",
-        [System.Windows.Forms.MessageBoxButtons]::OKCancel,
-        [System.Windows.Forms.MessageBoxIcon]::Information)
-    return ($result -eq [System.Windows.Forms.DialogResult]::OK)
+    $owner = Get-TopmostOwner
+    try {
+        $result = [System.Windows.Forms.MessageBox]::Show($owner, $msg, "Confirm Merge Order",
+            [System.Windows.Forms.MessageBoxButtons]::OKCancel,
+            [System.Windows.Forms.MessageBoxIcon]::Information)
+        return ($result -eq [System.Windows.Forms.DialogResult]::OK)
+    } finally { $owner.Dispose() }
 }
 
 function Invoke-FfmpegWithProgress {
@@ -148,16 +183,19 @@ function Invoke-FfmpegWithProgress {
 }
 
 function Select-OutputFile($initialDir, $defaultName) {
-    $dlg = New-Object System.Windows.Forms.SaveFileDialog
-    $dlg.Title = "Save merged video as..."
-    $dlg.Filter = "MP4 Video (*.mp4)|*.mp4"
-    $dlg.DefaultExt = "mp4"
-    $dlg.FileName = $defaultName
-    if ($initialDir -and (Test-Path $initialDir)) { $dlg.InitialDirectory = $initialDir }
-    if ($dlg.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
-        return $dlg.FileName
-    }
-    return $null
+    $owner = Get-TopmostOwner
+    try {
+        $dlg = New-Object System.Windows.Forms.SaveFileDialog
+        $dlg.Title = "Save merged video as..."
+        $dlg.Filter = "MP4 Video (*.mp4)|*.mp4"
+        $dlg.DefaultExt = "mp4"
+        $dlg.FileName = $defaultName
+        if ($initialDir -and (Test-Path $initialDir)) { $dlg.InitialDirectory = $initialDir }
+        if ($dlg.ShowDialog($owner) -eq [System.Windows.Forms.DialogResult]::OK) {
+            return $dlg.FileName
+        }
+        return $null
+    } finally { $owner.Dispose() }
 }
 
 # -- Pre-flight ------------------------------------------------------------
