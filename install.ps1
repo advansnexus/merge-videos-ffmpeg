@@ -39,25 +39,34 @@ Write-Host "[2/4] Installing script to $toolsDir ..."
 New-Item -ItemType Directory -Force -Path $toolsDir | Out-Null
 
 $scriptDir = Split-Path $MyInvocation.MyCommand.Path -Parent
-$src = Join-Path $scriptDir "merge-videos.ps1"
-$dst = Join-Path $toolsDir  "merge-videos.ps1"
 
-if (-not (Test-Path $src)) {
-    Write-Host "ERROR: merge-videos.ps1 not found next to install.ps1. Aborting." -ForegroundColor Red
-    exit 1
+# Install both the WPF GUI (merge-videos.ps1) and the classic CLI fallback
+# (merge-videos-cli.ps1). Patch each script's hardcoded $ffmpeg path so it
+# points at the FFmpeg install on this machine. The regex is space-tolerant
+# so it matches whether the source uses "$ffmpeg = " or "$ffmpeg  = ".
+$scriptsToInstall = @('merge-videos.ps1', 'merge-videos-cli.ps1')
+foreach ($scriptName in $scriptsToInstall) {
+    $src = Join-Path $scriptDir $scriptName
+    $dst = Join-Path $toolsDir  $scriptName
+    if (-not (Test-Path $src)) {
+        Write-Host "ERROR: $scriptName not found next to install.ps1. Aborting." -ForegroundColor Red
+        exit 1
+    }
+    $content = Get-Content $src -Raw
+    $content = $content -replace '(?m)^\$ffmpeg\s*=\s*".*"', "`$ffmpeg  = `"$ffmpegExe`""
+    Set-Content -Path $dst -Value $content -Encoding UTF8
 }
 
-$content = Get-Content $src -Raw
-# Patch the hardcoded ffmpeg path to match this machine
-$content = $content -replace '(?m)^\$ffmpeg = ".*"', "`$ffmpeg = `"$ffmpegExe`""
-Set-Content -Path $dst -Value $content -Encoding UTF8
-
-Write-Host "      Script installed." -ForegroundColor Green
+Write-Host "      Scripts installed (WPF + CLI fallback)." -ForegroundColor Green
 
 # -- Step 3: Create Desktop + Start Menu shortcuts -------------------------
 Write-Host "[3/4] Creating shortcuts..."
 
 $wsh = New-Object -ComObject WScript.Shell
+
+# The main shortcut always launches the WPF GUI. CLI fallback is available
+# from the install folder but not exposed as a shortcut.
+$mainScript = Join-Path $toolsDir "merge-videos.ps1"
 
 $shortcutTargets = @(
     (Join-Path ([Environment]::GetFolderPath('Desktop')) "Merge Videos.lnk"),
@@ -70,7 +79,7 @@ foreach ($lnk in $shortcutTargets) {
 
     $sc = $wsh.CreateShortcut($lnk)
     $sc.TargetPath       = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
-    $sc.Arguments        = "-NoProfile -ExecutionPolicy Bypass -STA -File `"$dst`""
+    $sc.Arguments        = "-NoProfile -ExecutionPolicy Bypass -STA -File `"$mainScript`""
     $sc.WorkingDirectory = $toolsDir
     $sc.IconLocation     = "$env:SystemRoot\System32\imageres.dll,174"  # film-reel-ish icon
     $sc.Description      = "Merge two or more videos with FFmpeg"
@@ -86,12 +95,13 @@ Write-Host "To merge videos:" -ForegroundColor Cyan
 Write-Host "  * Double-click 'Merge Videos' on your Desktop, OR"
 Write-Host "  * Start Menu -> search 'Merge Videos'"
 Write-Host ""
-Write-Host "You will be prompted to upload Video 1, Video 2, then asked"
-Write-Host "'Add another video?' - repeat until done. Videos are merged"
-Write-Host "in the order you upload them."
+Write-Host "The GUI opens as a persistent window. Add videos in the order"
+Write-Host "you want them joined, choose an output location, then click"
+Write-Host "'Start Merge'. Progress and live logs update in place."
 Write-Host ""
-Write-Host "To uninstall, run:" -ForegroundColor DarkGray
+Write-Host "To uninstall, run Uninstall.bat next to this installer, or:" -ForegroundColor DarkGray
 Write-Host "  Remove-Item `"$($shortcutTargets[0])`" -Force" -ForegroundColor DarkGray
 Write-Host "  Remove-Item `"$($shortcutTargets[1])`" -Force" -ForegroundColor DarkGray
-Write-Host "  Remove-Item `"$dst`" -Force" -ForegroundColor DarkGray
+Write-Host "  Remove-Item `"$toolsDir\merge-videos.ps1`" -Force" -ForegroundColor DarkGray
+Write-Host "  Remove-Item `"$toolsDir\merge-videos-cli.ps1`" -Force" -ForegroundColor DarkGray
 Write-Host ""

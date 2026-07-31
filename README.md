@@ -3,7 +3,7 @@
 [![CI](https://github.com/advansnexus/merge-videos-ffmpeg/actions/workflows/ci.yml/badge.svg)](https://github.com/advansnexus/merge-videos-ffmpeg/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Zero-cost Windows utility that merges two or more videos into a single file, in the exact order you upload them. Simple GUI: upload Video 1, upload Video 2, then answer "Add another?" — repeat as needed.
+Zero-cost Windows utility that merges two or more videos into a single file, in the exact order you add them. **Modern WPF single-window GUI** (dark theme, matching the Advans Signal design language) — add videos, reorder, pick output, click Start Merge, watch live progress + log in the same window.
 
 Companion to [`extract-audio-ffmpeg`](https://github.com/amoakoh22/extract-audio-ffmpeg) and shares the same install location (`%LOCALAPPDATA%\FFmpegTools\`).
 
@@ -39,18 +39,23 @@ Joins the uploaded videos end-to-end in upload order. First tries **stream copy*
 
 ---
 
-## User Flow
+## User Flow (WPF GUI)
 
-1. **Upload Video 1** — file picker opens with title "Upload Video 1"
-2. **Upload Video 2** — file picker opens with title "Upload Video 2"
-3. **Add another video?** — Yes/No dialog:
-   - Yes → file picker for Video 3 → dialog again ("Add another video?") → ...
-   - No → move to confirmation
-4. **Confirm order** — shows numbered list with per-input codec, resolution, duration, and audio presence (e.g. `[h264 1920x1080 2m14s audio]` or `[hevc 1280x720 45s SILENT]`), plus estimated total merged duration
-5. **Save merged video as...** — Save dialog, default name is `<first-video-name>_merged.mp4`
-6. **Progress + result** — real-time progress bar in the console, then green `SUCCESS` with input/output sizes
+The main entry point is a single always-visible window — no dialog-hopping, nothing can hide behind the terminal.
 
-The initial folder for each subsequent picker defaults to the folder of the previous upload, so navigating is fast when all videos live together.
+**Left column (Setup):**
+1. **Add Video...** — multi-select file picker. Each added video is probed with ffprobe and rendered as `1. filename    [codec res dur audio/SILENT]`.
+2. **Remove / Move Up / Move Down** — reorder freely. Order in the list = order in the merged output.
+3. **Choose output location...** — SaveFileDialog; default filename is `<first-video-name>_merged.mp4`.
+4. **Start Merge** — enabled once you have ≥2 videos AND an output path.
+5. **Cancel Running Merge** — kills the ffmpeg process cleanly and leaves the queue intact.
+
+**Right column (Details):**
+- **Summary card** — updates live as you add/remove: total count, total duration, combined size, codecs, resolutions, and which merge path will be used (stream copy vs. re-encode).
+- **Progress row** — label + percentage above a WPF ProgressBar animating on ffmpeg's `-progress pipe:1` output.
+- **Live log** — green-on-black Consolas timeline with a timestamp per line.
+
+If you prefer the classic step-by-step CLI (Video 1 → Video 2 → "Add another?"), run `merge-videos-cli.ps1` directly. It's installed alongside the GUI as a fallback for headless or WPF-unavailable environments.
 
 ---
 
@@ -159,8 +164,9 @@ Removes: Desktop shortcut, Start Menu shortcut, and `%LOCALAPPDATA%\FFmpegTools\
 | `GETTING-STARTED.txt` | Plain-text setup guide for non-technical colleagues — share this with the ZIP |
 | `Install.bat` | Double-click installer launcher — the only file non-technical colleagues need to run |
 | `install.ps1` | Installer script — detects/installs FFmpeg, copies script, creates shortcuts |
-| `merge-videos.ps1` | Main script — WinForms upload flow, ffmpeg concat, error handling |
-| `MergeVideos.bat` | Portable launcher — runs merge-videos.ps1 from this folder without installing |
+| `merge-videos.ps1` | Main script — WPF single-window GUI (dark theme, progress bar, live log) |
+| `merge-videos-cli.ps1` | Classic step-by-step CLI fallback (Video 1 → 2 → "Add another?") |
+| `MergeVideos.bat` | Portable launcher — runs merge-videos.ps1 (WPF) from this folder without installing |
 | `Uninstall.bat` | Double-click uninstaller launcher |
 | `uninstall.ps1` | Removes shortcuts and the installed script |
 | `Build-ShareZip.ps1` | Produces `MergeVideos-Installer.zip` for distribution |

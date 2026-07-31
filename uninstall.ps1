@@ -10,7 +10,8 @@ $ErrorActionPreference = "SilentlyContinue"
 $targets = @(
     (Join-Path ([Environment]::GetFolderPath('Desktop'))    "Merge Videos.lnk"),
     (Join-Path ([Environment]::GetFolderPath('StartMenu'))  "Programs\Merge Videos.lnk"),
-    (Join-Path $env:LOCALAPPDATA "FFmpegTools\merge-videos.ps1")
+    (Join-Path $env:LOCALAPPDATA "FFmpegTools\merge-videos.ps1"),
+    (Join-Path $env:LOCALAPPDATA "FFmpegTools\merge-videos-cli.ps1")
 )
 
 $removed = 0

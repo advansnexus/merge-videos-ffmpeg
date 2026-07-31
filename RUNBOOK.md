@@ -251,6 +251,17 @@ Chronological record of polish passes (from the `/loop 30m` polish cadence). Eac
 See "Sibling compatibility" and "Code signing" sections above.
 Added `tests\integration-test.ps1` — dot-sources merge-videos.ps1's helpers (via a temp file to avoid Invoke-Expression) and exercises them against real files. Verified `Get-VideoInfo`, `Format-Duration`, and `Invoke-FfmpegWithProgress` end-to-end with the user's actual sample pair (one has audio, one doesn't — exactly the mixed-audio scenario iteration 3 addressed).
 
+### Iteration 7 — 2026-07-31 — WPF single-window GUI (Advans Signal design language)
+- Real bug caught during first live use: the WinForms `MessageBox.Show()` for "Add another video?" spawned invisibly on some Windows Terminal configurations. User was left staring at a blinking cursor. Alt+Tab did not surface the dialog either.
+- **Hotfix first** (commit `afe22f5`): every MessageBox / OpenFileDialog / SaveFileDialog call now uses `Get-TopmostOwner` — a hidden 1×1 always-on-top form as the dialog's owner. Added `[Application]::EnableVisualStyles()` at load. Launchers pass `-STA` explicitly.
+- **Then structural fix**: rewrote the main entry point as a **WPF single-window GUI** modelled on the Advans Signal design language (dark `#1A1A1A` background, `#00BCF2` cyan accent, `#007ACC` primary, `#008272` confirm, `#D83B01` danger). The window stays open the whole time — there are no ephemeral dialogs to lose behind the terminal.
+- Layout: two columns via a `Grid`. Left is a `ScrollViewer` containing a `ListBox` of queued videos + Add/Remove/Move-Up/Move-Down buttons + output picker + Start/Cancel. Right holds a summary card (updates on every list change), a `ProgressBar` driven by ffmpeg's `-progress pipe:1`, and a green-on-black Consolas log pane.
+- Merge execution runs `ffmpeg` via `System.Diagnostics.Process` so we can Kill it on Cancel. Both stdout (progress key=value) and stderr (real errors) are drained inline while polling `HasExited`, keeping the UI responsive via `[Application]::DoEvents()`.
+- Classic CLI script preserved as `merge-videos-cli.ps1` for headless or WPF-unavailable environments; `install.ps1` installs BOTH and patches the `$ffmpeg` path in each. Only the WPF one gets a Desktop / Start Menu shortcut.
+- `Build-ShareZip.ps1` now bundles both scripts (8 files total). `uninstall.ps1` removes both. Smoke test's parse list includes all 5 scripts (`merge-videos.ps1`, `merge-videos-cli.ps1`, `install.ps1`, `uninstall.ps1`, `Build-ShareZip.ps1`).
+- `PSScriptAnalyzerSettings.psd1` gained one more exclusion: `PSUseShouldProcessForStateChangingFunctions`. Internal helpers named `Update-*`, `Remove-*`, `Start-*` in the GUI mutate widget state, not system state, and are never called with `-WhatIf/-Confirm`. Suppressing the rule keeps naming natural.
+- **Rationale:** the "modal MessageBox chain launched from a console script" pattern is fundamentally fragile on Windows — dialogs can spawn hidden, offscreen, or without focus. A persistent app window sidesteps the entire class of failure.
+
 ### Iteration 6 (final) — 2026-07-31 — done, no polish left
 - PSScriptAnalyzer clean across 4 production scripts + 2 test scripts.
 - CI green on last 3 pushes across 3 jobs (lint-winps 5.1, lint-pwsh 7, e2e-with-ffmpeg).

@@ -5,7 +5,16 @@
     # PSAvoidUsingWriteHost -- this project is deliberately console-first;
     # Write-Host is the intended API for the user-facing SUCCESS/ERROR summary,
     # matching the sibling extract-audio-ffmpeg project's style.
-    ExcludeRules = @('PSAvoidUsingWriteHost')
+    #
+    # PSUseShouldProcessForStateChangingFunctions -- internal helpers named
+    # Update-*, Remove-*, Start-* in this project mutate GUI state, not
+    # system state, and are never called with -WhatIf/-Confirm. Suppressing
+    # the rule project-wide keeps naming natural without wrapping every
+    # helper in SupportsShouldProcess.
+    ExcludeRules = @(
+        'PSAvoidUsingWriteHost',
+        'PSUseShouldProcessForStateChangingFunctions'
+    )
 
     # Everything else stays on. If we ever need to whitelist rules explicitly,
     # switch to `IncludeRules = @(...)` -- for now, all built-in rules apply.

@@ -23,7 +23,11 @@
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path $PSScriptRoot -Parent
 
-$scriptContent = Get-Content (Join-Path $repoRoot 'merge-videos.ps1') -Raw
+# Dot-source merge-videos-cli.ps1, not the WPF merge-videos.ps1 -- the CLI
+# script has a clean "helpers, then pre-flight, then flow" layout that lets
+# us load just the helpers. The WPF version's helpers are threaded through
+# event handlers and cannot be extracted without a rewrite.
+$scriptContent = Get-Content (Join-Path $repoRoot 'merge-videos-cli.ps1') -Raw
 $marker        = '# -- Pre-flight ------'
 $cut           = $scriptContent.IndexOf($marker)
 if ($cut -lt 0) {

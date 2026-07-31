@@ -35,7 +35,8 @@ $ErrorActionPreference = 'Stop'
 $filesToBundle = @(
     'Install.bat',
     'install.ps1',
-    'merge-videos.ps1',
+    'merge-videos.ps1',       # WPF single-window GUI (primary)
+    'merge-videos-cli.ps1',   # classic step-by-step CLI (fallback)
     'MergeVideos.bat',
     'Uninstall.bat',
     'uninstall.ps1',
