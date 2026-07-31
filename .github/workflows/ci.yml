@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke-test:
+    name: Smoke test (Windows PowerShell 5.1)
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install PSScriptAnalyzer
+        shell: powershell
+        run: |
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+          Install-Module -Name PSScriptAnalyzer -Scope CurrentUser -Force -SkipPublisherCheck
+          Get-Module -ListAvailable PSScriptAnalyzer | Select-Object Version, Name
+
+      - name: Run smoke test (Phase 1 only, CI mode)
+        shell: powershell
+        env:
+          MERGE_CI: '1'
+        run: |
+          powershell -NoProfile -ExecutionPolicy Bypass -File tests\smoke-test.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+  smoke-test-pwsh7:
+    name: Smoke test (PowerShell 7)
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install PSScriptAnalyzer (pwsh 7)
+        shell: pwsh
+        run: |
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+          Install-Module -Name PSScriptAnalyzer -Scope CurrentUser -Force -SkipPublisherCheck
+
+      - name: Run smoke test (Phase 1 only, CI mode)
+        shell: pwsh
+        env:
+          MERGE_CI: '1'
+        run: |
+          pwsh -NoProfile -ExecutionPolicy Bypass -File tests/smoke-test.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

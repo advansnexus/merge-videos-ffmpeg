@@ -6,8 +6,9 @@
 .DESCRIPTION
     Phase 1 (always):
         - PowerShell parse check on merge-videos.ps1, install.ps1, uninstall.ps1
+        - PSScriptAnalyzer static analysis (skipped with a note if module missing)
         - Concat-list escape correctness for pathological filenames
-        - FFmpeg availability at the installed / configured path
+        - FFmpeg availability at the installed / configured path (skipped in CI when ffmpeg absent)
 
     Phase 2 (opt-in via $env:MERGE_TEST_INPUTS):
         - End-to-end merge of two real video files
@@ -15,6 +16,11 @@
         Example:
             $env:MERGE_TEST_INPUTS = "C:\path\to\v1.mp4,C:\path\to\v2.mp4"
             powershell -ExecutionPolicy Bypass -File tests\smoke-test.ps1
+
+    CI mode:
+        Set $env:MERGE_CI = "1" to soften ffmpeg-availability from FAIL to SKIP
+        (so the workflow can run on a stock windows-latest image without
+        downloading 240 MB of ffmpeg just to lint).
 
     Exit code:
         0 = all pass
@@ -34,6 +40,10 @@ function Assert($cond, $name) {
         Write-Host "  [FAIL] $name" -ForegroundColor Red
         $script:failed++
     }
+}
+
+function Skip-Test($name, $reason) {
+    Write-Host "  [SKIP] $name -- $reason" -ForegroundColor DarkGray
 }
 
 Write-Host ""
@@ -56,9 +66,36 @@ foreach ($s in $scripts) {
     }
 }
 
-# -- Phase 1b: Concat-list escape correctness ------------------------------
+# -- Phase 1b: PSScriptAnalyzer static analysis ----------------------------
 Write-Host ""
-Write-Host "[2] Concat-list escape correctness"
+Write-Host "[2] PSScriptAnalyzer static analysis"
+
+$pssa = Get-Module -ListAvailable -Name PSScriptAnalyzer | Select-Object -First 1
+if (-not $pssa) {
+    Skip-Test "PSScriptAnalyzer scan" "module not installed (Install-Module PSScriptAnalyzer -Scope CurrentUser)"
+} else {
+    Import-Module PSScriptAnalyzer -ErrorAction Stop
+    $settings = Join-Path $repoRoot "PSScriptAnalyzerSettings.psd1"
+    $pssaArgs = @{
+        Path    = $repoRoot
+        Recurse = $true
+    }
+    if (Test-Path $settings) { $pssaArgs.Settings = $settings }
+    $findings = Invoke-ScriptAnalyzer @pssaArgs
+    $errors   = @($findings | Where-Object Severity -in 'Error','Warning')
+    Assert ($errors.Count -eq 0) "no Error/Warning-level PSScriptAnalyzer findings"
+    if ($errors.Count -gt 0) {
+        foreach ($f in $errors) {
+            Write-Host ("         {0}:{1}:{2} [{3}] {4} -- {5}" -f `
+                (Split-Path $f.ScriptName -Leaf), $f.Line, $f.Column, $f.Severity, $f.RuleName, $f.Message) `
+                -ForegroundColor DarkYellow
+        }
+    }
+}
+
+# -- Phase 1c: Concat-list escape correctness ------------------------------
+Write-Host ""
+Write-Host "[3] Concat-list escape correctness"
 
 # Replicate the exact escape logic from merge-videos.ps1
 function Format-ConcatLine([string]$path) {
@@ -71,9 +108,9 @@ Assert ((Format-ConcatLine "C:\my videos\a clip.mp4") -eq "file 'C:\my videos\a 
 Assert ((Format-ConcatLine "C:\videos\it's mine.mp4") -eq "file 'C:\videos\it'\''s mine.mp4'") "path with single quote"
 Assert ((Format-ConcatLine "C:\videos\-y evil.mp4") -eq "file 'C:\videos\-y evil.mp4'") "path starting with dash (flag-injection attempt)"
 
-# -- Phase 1c: FFmpeg availability -----------------------------------------
+# -- Phase 1d: FFmpeg availability -----------------------------------------
 Write-Host ""
-Write-Host "[3] FFmpeg availability"
+Write-Host "[4] FFmpeg availability"
 
 # Extract the $ffmpeg path from the (possibly installer-patched) script
 $installedScript = Join-Path $env:LOCALAPPDATA "FFmpegTools\merge-videos.ps1"
@@ -83,20 +120,27 @@ $content = Get-Content $scriptToCheck -Raw
 $match   = [regex]::Match($content, '(?m)^\$ffmpeg\s*=\s*"([^"]+)"')
 Assert $match.Success "found ffmpeg path declaration in $scriptToCheck"
 
+$ciMode = $env:MERGE_CI -eq '1'
+
 if ($match.Success) {
     $ffmpegPath = $match.Groups[1].Value
-    Assert (Test-Path $ffmpegPath) "ffmpeg.exe exists at $ffmpegPath"
+    $ffmpegPresent = Test-Path $ffmpegPath
 
-    if (Test-Path $ffmpegPath) {
+    if ($ffmpegPresent) {
+        Assert $true "ffmpeg.exe exists at $ffmpegPath"
         $ver = & $ffmpegPath -version 2>&1 | Select-Object -First 1
         Assert ($ver -match '^ffmpeg version') "ffmpeg -version returns valid output"
         Write-Host "         $ver" -ForegroundColor DarkGray
+    } elseif ($ciMode) {
+        Skip-Test "ffmpeg.exe presence check" "MERGE_CI=1 (stock windows-latest image, ffmpeg not installed)"
+    } else {
+        Assert $false "ffmpeg.exe exists at $ffmpegPath"
     }
 }
 
 # -- Phase 2: End-to-end merge (opt-in) ------------------------------------
 Write-Host ""
-Write-Host "[4] End-to-end merge (opt-in)"
+Write-Host "[5] End-to-end merge (opt-in)"
 
 if (-not $env:MERGE_TEST_INPUTS) {
     Write-Host "  [SKIP] set `$env:MERGE_TEST_INPUTS=`"path1.mp4,path2.mp4`" to enable" -ForegroundColor DarkGray

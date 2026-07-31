@@ -162,3 +162,21 @@ The installer auto-patches the FFmpeg path per-machine — no manual editing.
 ## Related tools
 
 - `extract-audio-ffmpeg` — sibling project. Same install location, same conventions. If you upgrade one, consider re-running the other's installer too to pick up any FFmpeg path change.
+
+---
+
+## Iteration Log
+
+Chronological record of polish passes (from the `/loop 30m` polish cadence). Each entry says WHAT was changed and WHY, so future maintainers (and future polish iterations) don't repeat work.
+
+### Iteration 1 — 2026-07-31 — Static analysis + CI
+- **Added PSScriptAnalyzer** as the project's static-analysis gate.
+  - `PSScriptAnalyzerSettings.psd1` — pinned config; excludes `PSAvoidUsingWriteHost` (the tool is deliberately console-first, matching sibling `extract-audio-ffmpeg`), fails on `Error` + `Warning` severities.
+  - `tests\smoke-test.ps1` — new Phase 1b runs `Invoke-ScriptAnalyzer` with the settings file; if the module is absent, phase is SKIPPED with a note (won't false-fail on machines without PSSA).
+  - Fixed the one baseline finding: renamed `Ask-AddMore` -> `Confirm-AddMore` (approved verb).
+- **Added GitHub Actions CI** at `.github\workflows\ci.yml`.
+  - Two jobs both on `windows-latest`: one under `powershell` (Windows PowerShell 5.1), one under `pwsh` (PowerShell 7).
+  - Both install PSScriptAnalyzer, then run `tests\smoke-test.ps1` with `MERGE_CI=1` so the ffmpeg-availability check downgrades from FAIL to SKIP (no need to spend 240 MB of runner bandwidth on the ffmpeg install just to lint).
+  - Triggers: push/PR to `main`, plus `workflow_dispatch` for manual reruns.
+- **Rationale:** every future polish iteration now has a zero-friction quality gate. PSSA prevents regressions on style / correctness; CI proves the whole path works on a clean image, not just the dev box.
+

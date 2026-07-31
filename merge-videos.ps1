@@ -34,7 +34,7 @@ function Select-VideoFile($number, $initialDir) {
     return $null
 }
 
-function Ask-AddMore($currentCount) {
+function Confirm-AddMore($currentCount) {
     $result = [System.Windows.Forms.MessageBox]::Show(
         "You have added $currentCount videos so far.`n`nAdd another video?",
         "Merge Videos",
@@ -105,7 +105,7 @@ $lastDir = Split-Path $v -Parent
 Write-Host ("Video 2: {0}" -f (Split-Path $v -Leaf))
 
 # -- Step 3: Loop - "Add another?" ----------------------------------------
-while (Ask-AddMore $videos.Count) {
+while (Confirm-AddMore $videos.Count) {
     $n = $videos.Count + 1
     $v = Select-VideoFile $n $lastDir
     if (-not $v) {
