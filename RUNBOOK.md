@@ -251,6 +251,37 @@ Chronological record of polish passes (from the `/loop 30m` polish cadence). Eac
 See "Sibling compatibility" and "Code signing" sections above.
 Added `tests\integration-test.ps1` — dot-sources merge-videos.ps1's helpers (via a temp file to avoid Invoke-Expression) and exercises them against real files. Verified `Get-VideoInfo`, `Format-Duration`, and `Invoke-FfmpegWithProgress` end-to-end with the user's actual sample pair (one has audio, one doesn't — exactly the mixed-audio scenario iteration 3 addressed).
 
+### Iteration 8 — 2026-07-31 — Robust-share (feature/robust-share branch)
+Goal: ship a ZIP to a colleague on Monday with zero "works on my machine" surprises. Every real-world failure mode caught in plain English, with concrete fix hints.
+
+- **`Test-System.ps1`** — pre-flight environment check. Runs before install even starts. Reports pass/warn/fail per check with a "Fix:" hint: Windows version, PowerShell 5.1+, STA thread, execution policy, Mark-of-the-Web, winget presence, WPF availability, FFmpeg presence, internet reachability to gyan.dev. `-Json` mode for machine-readable output (used by Get-DiagnosticInfo). Only OS-level blockers exit non-zero; warnings never gate the install.
+- **Unblock-first orchestration** — `Install.bat` unblocks every `.ps1 / .psd1 / .bat / .vbs` in the folder BEFORE running the pre-flight. Fixes the class of failure where MOTW-blocked scripts drop PS 5.1 into Constrained Language Mode and cause confusing `Get-ExecutionPolicy` errors.
+- **`install.ps1` rewrite** — same steps but every failure has "what happened / what to try next" plain English. Now with FFmpeg install chain: (a) winget-installed, (b) PATH, (c) portable, (d) winget install, (e) portable download from gyan.dev + Expand-Archive + patch-in (bare-metal fallback that works even with winget missing/blocked). Full install.log written to `%LOCALAPPDATA%\FFmpegTools\install.log` for support.
+- **`Get-DiagnosticInfo.ps1`** — colleague runs this when stuck. Bundles environment + Test-System JSON + install.log + FFmpegTools listing + shortcut targets + MOTW state + last 100 PS event-log entries + `ffmpeg -version` into `MergeVideos-Diagnostic-<host>-<yyyyMMdd-HHmmss>.zip`. NO video content, NO personal files.
+- **`Sign-Scripts.ps1`** — signs every .ps1 in the folder with a code-signing cert. Auto-creates a per-machine self-signed cert (`CN=MergeVideosDev-<host>`) if none supplied. `-Export` writes `MergeVideos-Publisher.cer` alongside for shipping.
+- **`Trust-Publisher.ps1`** — colleague-side companion: imports `MergeVideos-Publisher.cer` into `Cert:\CurrentUser\Root` and `Cert:\CurrentUser\TrustedPublisher`. No admin required. `-Untrust` reverses the operation.
+- **`GETTING-STARTED.txt` rewrite** — walkthrough (Extract → optional Trust-Publisher → Install → shortcut) + "If you see X, do Y" troubleshooting for every likely stumble.
+- **`Build-ShareZip.ps1`** — bundles all new files (11-12 depending on whether the .cer is present). Refuses to run if any required source is missing (fail loud during build, not at the colleague's PC).
+- **`uninstall.ps1`** — now also removes the portable FFmpeg dir + install.log alongside shortcuts and scripts.
+- **`PSScriptAnalyzerSettings.psd1`** — no new exclusions; every warning fixed in code.
+- **Smoke test**: parse list expanded to 9 production scripts. All pass 38/38.
+
+**Deliberately deferred:**
+- Actual synthetic MOTW end-to-end simulation. Tripping Zone.Identifier via `Set-Content -Stream` produces edge cases (Constrained Language Mode) that real downloads from Teams/OneDrive/email don't necessarily reproduce. Real colleague-machine test on Monday is the ground truth.
+- EV code-signing cert ($$$, weeks to build SmartScreen reputation). Self-signed + Trust-Publisher.ps1 is the honest workaround.
+
+**How the operator ships to a colleague:**
+```powershell
+# (optional) sign for smoother first-run:
+powershell -File Sign-Scripts.ps1 -Export
+
+# build the ZIP:
+powershell -File Build-ShareZip.ps1
+
+# send MergeVideos-Installer.zip via Teams / email. Colleague extracts
+# it, optionally double-clicks Trust-Publisher.ps1, then Install.bat.
+```
+
 ### Iteration 7 — 2026-07-31 — WPF single-window GUI (Advans Signal design language)
 - Real bug caught during first live use: the WinForms `MessageBox.Show()` for "Add another video?" spawned invisibly on some Windows Terminal configurations. User was left staring at a blinking cursor. Alt+Tab did not surface the dialog either.
 - **Hotfix first** (commit `afe22f5`): every MessageBox / OpenFileDialog / SaveFileDialog call now uses `Get-TopmostOwner` — a hidden 1×1 always-on-top form as the dialog's owner. Added `[Application]::EnableVisualStyles()` at load. Launchers pass `-STA` explicitly.

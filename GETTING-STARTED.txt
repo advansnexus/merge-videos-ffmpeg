@@ -1,32 +1,62 @@
 MERGE VIDEOS (FFMPEG)  --  SETUP GUIDE
 =======================================
 
-REQUIREMENTS: Windows 10 or 11. Internet during setup only. No admin needed.
+REQUIREMENTS: Windows 10 or 11, internet during setup only. No admin needed.
 
 
 STEP 1  --  EXTRACT THE ZIP
 ---------------------------
 Right-click the ZIP file  ->  Extract All  ->  Extract
 
+  Important: EXTRACT it. Do NOT double-click Install.bat while it's
+  still inside the ZIP viewer, or Windows will run it in a temporary
+  location and the install will fail.
 
-STEP 2  --  RUN THE INSTALLER
+
+STEP 2  --  (RECOMMENDED, OPTIONAL) ACCEPT THE PUBLISHER
+--------------------------------------------------------
+Only relevant if this ZIP shipped with a MergeVideos-Publisher.cer.
+If it does, double-click:
+
+    Trust-Publisher.ps1
+
+You may see "Windows PowerShell has stopped working" or a security
+prompt. Accept it. This is a one-time step per machine that lets
+signed Merge Videos scripts run without prompting.
+
+
+STEP 3  --  RUN THE INSTALLER
 -----------------------------
 Open the extracted folder and double-click:
 
     Install.bat
 
-A dark window opens and runs automatically. Do not close it.
-Wait for:  [4/4] Done!
-Then press any key to close.
+A dark window opens. It runs TWO stages in order:
 
-   Takes a few minutes on first run -- it is downloading a free tool (~240 MB).
-   If FFmpeg was already installed by the extract-audio tool, this is instant.
+  Stage 1: Pre-flight check
+      Verifies Windows version, PowerShell, execution policy,
+      internet, and FFmpeg availability. If anything is red,
+      it stops and tells you EXACTLY what to fix.
 
-   If Windows shows "Windows protected your PC":
-     Click "More info"  ->  "Run anyway"  (this is normal, the tool is safe)
+  Stage 2: Install
+      Unblocks the extracted files, installs FFmpeg if missing
+      (winget first, else portable download from gyan.dev, about
+      100 MB), copies the merge scripts to your user profile,
+      and creates Desktop + Start Menu shortcuts.
+
+Wait for  "Ready to use"  in green. Then press any key.
+
+  First-run takes a few minutes because FFmpeg (about 100 MB)
+  is being downloaded.
+
+  If Windows shows "Windows protected your PC":
+      Click "More info"  ->  "Run anyway"
+      This is normal for scripts that are not signed by a
+      big-name commercial CA. The install is safe -- source is
+      https://github.com/advansnexus/merge-videos-ffmpeg
 
 
-STEP 3  --  CONFIRM IT WORKED
+STEP 4  --  CONFIRM IT WORKED
 ------------------------------
 You should now have on your Desktop:
 
@@ -43,49 +73,65 @@ HOW TO USE
 ----------
 
 1. Double-click "Merge Videos" (Desktop or Start Menu).
+   A dark window titled "Merge Videos (FFmpeg) - Advans" opens.
 
-2. A file picker opens titled "Upload Video 1".
-   Browse to and select your first video. Click Open.
+2. Left panel:
+   * Click "Add Video..." to pick one or more videos. Repeat if
+     needed. The list on the left shows them in play order.
+   * Use "Move Up" / "Move Down" to reorder, or "Remove" to drop one.
+   * Click "Choose output location..." and pick where to save the
+     merged file.
 
-3. Another file picker opens titled "Upload Video 2".
-   Browse to and select your second video. Click Open.
+3. Right panel:
+   * Summary shows total duration, size, and whether audio will be
+     injected for any silent inputs.
+   * When you click "Start Merge", the progress bar and green log
+     update in place.
 
-4. A Yes/No dialog appears:  "Add another video?"
-   -  Click YES to add a third video (picker opens again as "Upload Video 3")
-   -  Click NO to stop adding videos
-   Repeat as needed. You can add as many videos as you want.
-
-5. A confirmation window shows the merge order.
-   -  Click OK to proceed
-   -  Click Cancel to abort and start over
-
-6. A Save dialog appears titled "Save merged video as...".
-   Choose where to save the merged file and click Save.
-   Default name is <first-video-name>_merged.mp4.
-
-7. A dark window shows progress. Wait for green SUCCESS.
-   Press any key to close.
-
-
-EXAMPLE
--------
-You want to join two screen recordings in a specific order:
-
-  Video 1:  Cropping and scanning.mp4        <- plays first
-  Video 2:  IBRAHIM BASIRU SCANNING.mp4      <- plays second
-
-Result:  Cropping and scanning_merged.mp4  (both clips, back-to-back)
+4. When you see the green SUCCESS line, the merge is saved to the
+   output location you picked. Play the file to confirm.
 
 
 TROUBLESHOOTING
 ---------------
-Shortcut missing                      ->  Run Install.bat again
-Window closes immediately             ->  Move videos to Desktop and try again
-"Stream copy failed" (yellow warning) ->  Normal -- it is retrying with re-encoding.
-                                          Wait for green SUCCESS.
-Merge takes very long                 ->  Re-encoding path was used -- expected for
-                                          large or mismatched-source videos
-Red error in window                   ->  Screenshot it and send to whoever shared this
+Install.bat opens then immediately closes
+    ->  You double-clicked while still inside the ZIP. Extract
+        the ZIP first (right-click -> Extract All).
+
+Pre-flight says "AllSigned" execution policy
+    ->  Your machine requires signed scripts. If this ZIP shipped
+        a MergeVideos-Publisher.cer, run Trust-Publisher.ps1 first
+        (Step 2 above). Otherwise ask IT to relax to RemoteSigned
+        for your user.
+
+Install stalls at "Downloading portable FFmpeg..."
+    ->  Corporate proxy is blocking gyan.dev. Download this file
+        manually in a browser:
+          https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip
+        Extract it into  %LOCALAPPDATA%\FFmpegTools\portable\
+        Then re-run Install.bat.
+
+"Merge Videos" shortcut opens a black window then disappears
+    ->  WPF is missing or execution policy is blocking. Run
+        Test-System.ps1 from the ZIP folder to see which one.
+
+Merge fails with "Input link ... parameters do not match"
+    ->  This should be handled automatically now. If it isn't,
+        run Get-DiagnosticInfo.ps1 and send the ZIP to the
+        maintainer.
+
+Anything else
+    ->  Double-click Get-DiagnosticInfo.ps1 in the extracted folder.
+        It builds a ZIP of your system info + install logs + FFmpeg
+        version. Email that ZIP to whoever shared this tool. It
+        contains NO video content -- just diagnostic info.
+
+
+UNINSTALL
+---------
+Double-click  Uninstall.bat  in the extracted folder.
+Removes the shortcuts and scripts. Leaves FFmpeg installed (other
+tools may use it).
 
 
 OUTPUT FILE IS SAVED WHEREVER YOU CHOSE IN THE SAVE DIALOG.
